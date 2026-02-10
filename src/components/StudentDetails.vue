@@ -1,30 +1,57 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { db } from '@/firebase'
-import { doc, getDoc, collection, getDocs } from 'firebase/firestore'
+import { doc, getDoc, collection, getDocs, query, orderBy, limit } from 'firebase/firestore'
+
+// Type definitions
+interface Student {
+  fullName?: string
+  name?: string
+  email?: string
+  phone?: string
+  schoolId?: string
+  academicProgram?: string
+  program?: string
+  dob?: string
+  status?: string
+  [key: string]: unknown
+}
+
+interface Survey {
+  id: string
+  timestamp?: {
+    seconds: number
+  }
+  [key: string]: unknown
+}
+
+interface DisplayField {
+  label: string
+  value: unknown
+}
 
 const route = useRoute()
 const id = String(route.params.id ?? '')
 
 const loading = ref(true)
 const error = ref('')
-const student = ref<Record<string, any> | null>(null)
-const surveys = ref<Array<Record<string, any>>>([])
+const student = ref<Student | null>(null)
+const surveys = ref<Survey[]>([])
 const surveysLoading = ref(false)
 const surveysExpanded = ref(false)
+const riskLevel = ref<string | null>(null)
+const riskLoading = ref(false)
+// removed selfAssessmentsRiskEntries UI and loading refs (handled via `riskLevel`)
 
-const knownOrder = [
-  'fullName',
-  'name',
-  'email',
-  'phone',
-  'schoolId',
-  'academicProgram',
-  'program',
-  'dob',
-  'status',
-]
+const riskBadgeClasses = computed(() => {
+  const r = String(riskLevel.value ?? '').toLowerCase()
+  const base = 'inline-flex items-center px-3 py-1 text-2xl font-semibold rounded'
+  if (r === 'high') return [base, 'bg-red-100 text-red-800']
+  if (r === 'medium') return [base, 'bg-orange-100 text-orange-800']
+  if (r === 'low') return [base, 'bg-green-100 text-green-800']
+  return [base, 'bg-gray-100 text-gray-700']
+})
 
 const personalFields = ['fullName', 'name', 'email', 'phone', 'dob']
 const academicFields = ['schoolId', 'academicProgram', 'program', 'status']
@@ -32,9 +59,9 @@ const academicFields = ['schoolId', 'academicProgram', 'program', 'status']
 const displayFields = () => {
   if (!student.value) return { personal: [], academic: [], other: [] }
 
-  const personal: Array<{ label: string; value: any }> = []
-  const academic: Array<{ label: string; value: any }> = []
-  const other: Array<{ label: string; value: any }> = []
+  const personal: DisplayField[] = []
+  const academic: DisplayField[] = []
+  const other: DisplayField[] = []
   const used = new Set<string>()
 
   // Process personal fields
@@ -59,7 +86,7 @@ const displayFields = () => {
   }
 
   // Process remaining fields
-  for (const [k, v] of Object.entries(student.value)) {
+  for (const [k, v] of Object.entries(student.value!)) {
     if (used.has(k)) continue
     other.push({
       label: k.replace(/([A-Z])/g, ' $1').replace(/^./, (s) => s.toUpperCase()),
@@ -77,7 +104,7 @@ const fetchSurveys = async () => {
   try {
     const surveysRef = collection(db, 'users', id, 'initialProfileSurveys')
     const surveysSnap = await getDocs(surveysRef)
-    surveys.value = surveysSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+    surveys.value = surveysSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Survey)
   } catch (err) {
     console.error('Failed to load surveys:', err)
   } finally {
@@ -92,32 +119,34 @@ const toggleSurveys = () => {
   }
 }
 
-const formatSurveyValue = (value: any): string => {
-  if (value === null || value === undefined) return '—'
-  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-    return String(value)
-  }
-  if (Array.isArray(value)) {
-    return value.join(', ')
-  }
-  if (typeof value === 'object') {
-    // Handle nested objects by showing key-value pairs
-    const entries = Object.entries(value)
-    if (entries.length === 0) return '—'
-    return entries.map(([k, v]) => `${k}: ${v}`).join(', ')
-  }
-  return String(value)
-}
+const flattenSurveyData = (survey: Survey): DisplayField[] => {
+  const flattened: DisplayField[] = []
 
-const flattenSurveyData = (survey: Record<string, any>) => {
-  const flattened: Array<{ label: string; value: any }> = []
+  const keyLabelMap: Record<string, string> = {
+    reminder_pref: 'Reminder Preference',
+    role: 'Educational Attainment',
+    stress_help: 'How do you cope with stress',
+    living_with: 'Currently living with',
+    age_range: 'Current age bracket',
+  }
 
-  const processValue = (key: string, value: any, prefix = '') => {
+  const processValue = (key: string, value: unknown, prefix = '') => {
     const fullKey = prefix ? `${prefix}.${key}` : key
-    const label = fullKey
-      .replace(/([A-Z])/g, ' $1')
-      .replace(/^./, (s) => s.toUpperCase())
-      .replace(/\./g, ' - ')
+    const leaf = String(fullKey).split('.').pop() || fullKey
+    const leafLower = leaf.toLowerCase()
+
+    // Skip any created/createdAt/created_at fields
+    if (leafLower.includes('created')) return
+
+    // Prefer mapped human label for known keys
+    const mapped = keyLabelMap[leaf]
+    const label = mapped
+      ? mapped
+      : fullKey
+          .replace(/([A-Z])/g, ' $1')
+          .replace(/_/g, ' ')
+          .replace(/^./, (s) => s.toUpperCase())
+          .replace(/\./g, ' - ')
 
     if (value === null || value === undefined) {
       flattened.push({ label, value: '—' })
@@ -133,9 +162,9 @@ const flattenSurveyData = (survey: Record<string, any>) => {
       } else {
         flattened.push({ label, value: value.join(', ') })
       }
-    } else if (typeof value === 'object') {
+    } else if (typeof value === 'object' && value !== null) {
       // Recursively process nested objects
-      for (const [nestedKey, nestedValue] of Object.entries(value)) {
+      for (const [nestedKey, nestedValue] of Object.entries(value as Record<string, unknown>)) {
         processValue(nestedKey, nestedValue, fullKey)
       }
     } else {
@@ -162,13 +191,101 @@ onMounted(async () => {
     if (!snap.exists()) {
       throw new Error('Student not found')
     }
-    student.value = snap.data()
-  } catch (err: any) {
-    error.value = err?.message ?? 'Failed to load student'
+    student.value = snap.data() as Student
+    // fetch risk level after student loads
+    fetchRiskLevel()
+    // riskLevel is determined by `fetchRiskLevel()` which queries `selfAssessments`
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Failed to load student'
   } finally {
     loading.value = false
   }
 })
+
+const fetchRiskLevel = async () => {
+  if (!id) return
+  riskLoading.value = true
+  try {
+    // 1) If the student document includes a riskLevel explicitly, use it
+    const stud = student.value as Record<string, unknown> | null
+    if (stud && stud.riskLevel !== undefined && stud.riskLevel !== null) {
+      riskLevel.value = String(stud.riskLevel)
+      return
+    }
+
+    // 2) Try the common case: query the latest selfAssessments doc ordered by `timestamp`
+    try {
+      const selfRef = collection(db, 'users', id, 'selfAssessments')
+      const q = query(selfRef, orderBy('timestamp', 'desc'), limit(1))
+      const sSnap = await getDocs(q)
+      if (!sSnap.empty) {
+        const sdata = sSnap.docs[0].data() as Record<string, unknown>
+        if (Object.prototype.hasOwnProperty.call(sdata, 'riskLevel') && sdata.riskLevel != null) {
+          riskLevel.value = String(sdata.riskLevel)
+          return
+        }
+        if (Object.prototype.hasOwnProperty.call(sdata, 'risk') && sdata.risk != null) {
+          riskLevel.value = String(sdata.risk)
+          return
+        }
+      }
+    } catch (e) {
+      // This can fail if `timestamp` isn't present or not indexed — fall back to scanning
+      console.warn('Ordered selfAssessments lookup failed, will fall back to scanning:', e)
+    }
+
+    // 3) Fallback: scan all docs and pick the most recent doc that contains riskLevel/risk
+    try {
+      const selfRefAll = collection(db, 'users', id, 'selfAssessments')
+      const allSnap = await getDocs(selfRefAll)
+      let best: { value: string; seconds: number } | null = null
+      allSnap.docs.forEach((d) => {
+        const data = d.data() as Record<string, unknown>
+        let candidate: string | null = null
+        if (Object.prototype.hasOwnProperty.call(data, 'riskLevel') && data.riskLevel != null) {
+          candidate = String(data.riskLevel)
+        } else if (Object.prototype.hasOwnProperty.call(data, 'risk') && data.risk != null) {
+          candidate = String(data.risk)
+        }
+        if (candidate) {
+          const ts = data.timestamp as unknown
+          let seconds = -Infinity
+          if (
+            typeof ts === 'object' &&
+            ts !== null &&
+            'seconds' in (ts as Record<string, unknown>)
+          ) {
+            const maybe = (ts as Record<string, unknown>)['seconds']
+            if (typeof maybe === 'number') seconds = maybe
+          } else if (typeof ts === 'number') {
+            // assume milliseconds
+            seconds = Math.floor((ts as number) / 1000)
+          }
+          if (!best || seconds > best.seconds) {
+            best = { value: candidate, seconds }
+          }
+        }
+      })
+      if (best) {
+        riskLevel.value = best.value
+        return
+      }
+    } catch (e) {
+      console.warn('Scanning selfAssessments failed:', e)
+    }
+
+    // final fallback
+    console.debug('No riskLevel found in student doc or selfAssessments')
+    riskLevel.value = 'Unknown'
+  } catch (err) {
+    console.error('Failed to fetch risk level:', err)
+    riskLevel.value = 'Unknown'
+  } finally {
+    riskLoading.value = false
+  }
+}
+
+// removed unused helpers and scans for selfAssessments (risk is computed by `fetchRiskLevel`)
 </script>
 
 <template>
@@ -188,11 +305,21 @@ onMounted(async () => {
               {{ (student?.fullName ?? student?.name ?? 'U').charAt(0).toUpperCase() }}
             </span>
           </div>
-          <div>
-            <h1 class="text-2xl font-bold text-gray-900">
-              {{ student?.fullName ?? student?.name ?? 'Unnamed Student' }}
-            </h1>
-            <p class="text-gray-600">{{ student?.schoolId ?? 'No ID' }}</p>
+          <div class="flex-1 flex items-start justify-between">
+            <div>
+              <h1 class="text-2xl font-bold text-gray-900">
+                {{ student?.fullName ?? student?.name ?? 'Unnamed Student' }}
+              </h1>
+              <p class="text-gray-600">{{ student?.schoolId ?? 'No ID' }}</p>
+            </div>
+
+            <div class="ml-4 flex-shrink-0">
+              <div v-if="riskLoading" class="text-sm text-gray-500">Checking risk…</div>
+              <div v-else>
+                <span v-if="riskLevel" :class="riskBadgeClasses">Risk: {{ riskLevel }}</span>
+                <span v-else class="text-2xl text-gray-500">Risk: Unknown</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -285,6 +412,8 @@ onMounted(async () => {
           </div>
         </div>
       </div>
+
+      <!-- Self Assessments UI removed; riskLevel shown on header via fetchRiskLevel() -->
     </div>
   </div>
 </template>

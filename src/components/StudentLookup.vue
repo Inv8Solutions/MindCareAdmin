@@ -40,17 +40,24 @@ const fetchBySchoolId = async (term: string) => {
     )
     const snap = await getDocs(qry)
     results.value = snap.docs.map((d) => {
-      const data: any = d.data()
+      const data = d.data() as Record<string, unknown>
+      const fullName =
+        (data.fullName as string) ??
+        (data.name as string) ??
+        (data.displayName as string) ??
+        'Unnamed'
+      const academicProgram = (data.academicProgram as string) ?? (data.program as string) ?? ''
       return {
         id: d.id,
-        fullName: data.fullName ?? data.name ?? data.displayName ?? 'Unnamed',
-        academicProgram: data.academicProgram ?? data.program ?? '',
-        schoolId: data.schoolId,
+        fullName,
+        academicProgram,
+        schoolId: data.schoolId as string | undefined,
       }
     })
-  } catch (err: any) {
+  } catch (err: unknown) {
     results.value = []
-    error.value = err?.message ?? 'Failed to query Firestore'
+    const msg = err instanceof Error ? err.message : String(err)
+    error.value = msg || 'Failed to query Firestore'
   } finally {
     loading.value = false
   }

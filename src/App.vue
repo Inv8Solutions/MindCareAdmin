@@ -1,9 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import AdminLogin from './components/AdminLogin.vue'
-import AdminDashboard from './components/AdminDashboard.vue'
-
-const loggedIn = ref(false)
+// App shell - routing handled by `router-view`.
 </script>
 
 <template>
