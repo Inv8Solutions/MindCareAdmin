@@ -219,14 +219,17 @@ const fetchRiskLevel = async () => {
       const q = query(selfRef, orderBy('timestamp', 'desc'), limit(1))
       const sSnap = await getDocs(q)
       if (!sSnap.empty) {
-        const sdata = sSnap.docs[0].data() as Record<string, unknown>
-        if (Object.prototype.hasOwnProperty.call(sdata, 'riskLevel') && sdata.riskLevel != null) {
-          riskLevel.value = String(sdata.riskLevel)
-          return
-        }
-        if (Object.prototype.hasOwnProperty.call(sdata, 'risk') && sdata.risk != null) {
-          riskLevel.value = String(sdata.risk)
-          return
+        const firstDoc = sSnap.docs[0]
+        if (firstDoc) {
+          const sdata = firstDoc.data() as Record<string, unknown>
+          if (Object.prototype.hasOwnProperty.call(sdata, 'riskLevel') && sdata.riskLevel != null) {
+            riskLevel.value = String(sdata.riskLevel)
+            return
+          }
+          if (Object.prototype.hasOwnProperty.call(sdata, 'risk') && sdata.risk != null) {
+            riskLevel.value = String(sdata.risk)
+            return
+          }
         }
       }
     } catch (e) {
@@ -267,7 +270,6 @@ const fetchRiskLevel = async () => {
         }
       })
       if (best) {
-        riskLevel.value = best.value
         return
       }
     } catch (e) {

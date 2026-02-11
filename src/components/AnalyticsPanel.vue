@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 
-// Sample data - replace with real data from your backend
+// Sample KPI cards — replace values with real backend data
 const kpis = ref([
-  { title: 'Total Students', value: '2,847', change: '+12%', trend: 'up' },
-  { title: 'Active Sessions', value: '142', change: '+3%', trend: 'up' },
-  { title: 'Avg Session Duration', value: '24m', change: '-2%', trend: 'down' },
-  { title: 'Satisfaction Rate', value: '94%', change: '+5%', trend: 'up' },
+  { title: 'Registered Students', value: '2,847', change: '+12%', trend: 'up' },
+  { title: 'Learners with special needs (LSNs)', value: '128', change: '+2%', trend: 'up' },
+  { title: 'Verified Students', value: '2,432', change: '+8%', trend: 'up' },
+  { title: 'Students who answered assessment', value: '1,956', change: '+4%', trend: 'up' },
 ])
 
 const timeRange = ref('7d')
@@ -40,32 +40,57 @@ const timeRange = ref('7d')
 
     <!-- Charts Section -->
     <div class="charts-grid">
-      <!-- Usage Trends Chart -->
+      <!-- Mental Health Risk Chart -->
       <div class="chart-container large">
         <div class="chart-header">
-          <h4>Usage Trends</h4>
+          <h4>Mental Health Risk</h4>
           <div class="chart-legend">
             <span class="legend-item">
-              <span class="legend-color primary"></span>
-              Sessions
+              <span class="legend-color" style="background: #ef4444"></span>
+              High risk
             </span>
             <span class="legend-item">
-              <span class="legend-color secondary"></span>
-              New Users
+              <span class="legend-color" style="background: #f59e0b"></span>
+              Medium risk
+            </span>
+            <span class="legend-item">
+              <span class="legend-color" style="background: #10b981"></span>
+              Low risk
             </span>
           </div>
         </div>
         <div class="chart-placeholder">
           <div class="chart-bars">
-            <div class="bar" style="height: 60%"></div>
-            <div class="bar" style="height: 80%"></div>
-            <div class="bar" style="height: 45%"></div>
-            <div class="bar" style="height: 90%"></div>
-            <div class="bar" style="height: 70%"></div>
-            <div class="bar" style="height: 85%"></div>
-            <div class="bar" style="height: 95%"></div>
+            <div
+              class="bar"
+              style="height: 20%; background: linear-gradient(to top, #ef4444, #fca5a5)"
+            ></div>
+            <div
+              class="bar"
+              style="height: 45%; background: linear-gradient(to top, #f59e0b, #fcd34d)"
+            ></div>
+            <div
+              class="bar"
+              style="height: 70%; background: linear-gradient(to top, #10b981, #6ee7b7)"
+            ></div>
+            <div
+              class="bar"
+              style="height: 55%; background: linear-gradient(to top, #f59e0b, #fcd34d)"
+            ></div>
+            <div
+              class="bar"
+              style="height: 30%; background: linear-gradient(to top, #ef4444, #fca5a5)"
+            ></div>
+            <div
+              class="bar"
+              style="height: 65%; background: linear-gradient(to top, #10b981, #6ee7b7)"
+            ></div>
+            <div
+              class="bar"
+              style="height: 40%; background: linear-gradient(to top, #f59e0b, #fcd34d)"
+            ></div>
           </div>
-          <p class="chart-note">Interactive chart will replace this placeholder</p>
+          <p class="chart-note">Risk distribution placeholder — replace with real risk chart</p>
         </div>
       </div>
 
