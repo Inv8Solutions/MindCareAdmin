@@ -40,6 +40,8 @@ const student = ref<Student | null>(null)
 const surveys = ref<Survey[]>([])
 const surveysLoading = ref(false)
 const surveysExpanded = ref(false)
+const selfAssessments = ref<Survey[]>([])
+const selfAssessmentsLoading = ref(false)
 const riskLevel = ref<string | null>(null)
 const riskLoading = ref(false)
 // removed selfAssessmentsRiskEntries UI and loading refs (handled via `riskLevel`)
@@ -194,13 +196,29 @@ onMounted(async () => {
     student.value = snap.data() as Student
     // fetch risk level after student loads
     fetchRiskLevel()
-    // riskLevel is determined by `fetchRiskLevel()` which queries `selfAssessments`
+    // load selfAssessments documents for display under Initial Profile Surveys
+    fetchSelfAssessments()
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Failed to load student'
   } finally {
     loading.value = false
   }
 })
+
+const fetchSelfAssessments = async () => {
+  if (!id) return
+  selfAssessmentsLoading.value = true
+  try {
+    const refCol = collection(db, 'users', id, 'selfAssessments')
+    const snap = await getDocs(refCol)
+    selfAssessments.value = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Survey)
+  } catch (err) {
+    console.error('Failed to load selfAssessments:', err)
+    selfAssessments.value = []
+  } finally {
+    selfAssessmentsLoading.value = false
+  }
+}
 
 const fetchRiskLevel = async () => {
   if (!id) return
@@ -406,6 +424,39 @@ const fetchRiskLevel = async () => {
                   :key="field.label"
                   class="space-y-1"
                 >
+                  <div class="text-sm font-medium text-gray-600">{{ field.label }}</div>
+                  <div class="text-sm text-gray-800">{{ field.value }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Self Assessments (displayed below initial profile surveys) -->
+      <div class="bg-white rounded-lg shadow-sm border">
+        <h3 class="text-lg font-semibold text-gray-900 p-4 border-b">Self Assessments</h3>
+        <div class="p-4">
+          <div v-if="selfAssessmentsLoading" class="text-center py-4">
+            <div class="text-gray-500">Loading self-assessments...</div>
+          </div>
+          <div v-else-if="selfAssessments.length === 0" class="text-center py-4">
+            <div class="text-gray-500">No self-assessments found</div>
+          </div>
+          <div v-else class="space-y-4">
+            <div
+              v-for="(s, idx) in selfAssessments"
+              :key="s.id"
+              class="p-4 bg-gray-50 rounded-lg border"
+            >
+              <h4 class="font-medium text-gray-900 mb-3">
+                Self Assessment {{ idx + 1 }}
+                <span v-if="s.timestamp" class="text-sm text-gray-500 font-normal">
+                  ({{ new Date(((s.timestamp as { seconds: number }).seconds) * 1000).toLocaleDateString() }})
+                </span>
+              </h4>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div v-for="field in flattenSurveyData(s)" :key="field.label" class="space-y-1">
                   <div class="text-sm font-medium text-gray-600">{{ field.label }}</div>
                   <div class="text-sm text-gray-800">{{ field.value }}</div>
                 </div>

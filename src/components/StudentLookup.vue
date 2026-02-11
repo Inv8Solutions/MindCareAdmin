@@ -40,7 +40,7 @@ const fetchBySchoolId = async (term: string) => {
     )
     const snap = await getDocs(qry)
     results.value = snap.docs.map((d) => {
-      const data = d.data() as Record<string, unknown>
+    const data = d.data() as Record<string, unknown>
       const fullName =
         (data.fullName as string) ??
         (data.name as string) ??
