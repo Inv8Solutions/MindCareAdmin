@@ -452,7 +452,11 @@ const fetchRiskLevel = async () => {
               <h4 class="font-medium text-gray-900 mb-3">
                 Self Assessment {{ idx + 1 }}
                 <span v-if="s.timestamp" class="text-sm text-gray-500 font-normal">
-                  ({{ new Date(((s.timestamp as { seconds: number }).seconds) * 1000).toLocaleDateString() }})
+                  ({{
+                    new Date(
+                      (s.timestamp as { seconds: number }).seconds * 1000,
+                    ).toLocaleDateString()
+                  }})
                 </span>
               </h4>
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
