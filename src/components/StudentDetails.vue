@@ -99,6 +99,37 @@ const displayFields = () => {
   return { personal, academic, other }
 }
 
+const formatTimestamp = (ts: unknown): string => {
+  if (!ts) return '—'
+  try {
+    let date: Date | null = null
+    if (typeof ts === 'object' && ts !== null && 'seconds' in (ts as Record<string, unknown>)) {
+      const seconds = (ts as { seconds: number }).seconds
+      date = new Date(seconds * 1000)
+    } else if (typeof ts === 'number') {
+      date = new Date(ts)
+    } else if (ts instanceof Date) {
+      date = ts
+    } else if (typeof ts === 'string') {
+      date = new Date(ts)
+    }
+
+    if (date && !isNaN(date.getTime())) {
+      return date.toLocaleString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      })
+    }
+  } catch {
+    // Fall through
+  }
+  return String(ts)
+}
+
 const fetchSurveys = async () => {
   if (!id) return
 
@@ -121,7 +152,7 @@ const toggleSurveys = () => {
   }
 }
 
-const flattenSurveyData = (survey: Survey): DisplayField[] => {
+const flattenSurveyData = (survey: Survey, showCreatedAt = false): DisplayField[] => {
   const flattened: DisplayField[] = []
 
   const keyLabelMap: Record<string, string> = {
@@ -130,6 +161,9 @@ const flattenSurveyData = (survey: Survey): DisplayField[] => {
     stress_help: 'How do you cope with stress',
     living_with: 'Currently living with',
     age_range: 'Current age bracket',
+    createdAt: 'Completed At',
+    riskLevel: 'Risk Level',
+    risk: 'Risk Level',
   }
 
   const processValue = (key: string, value: unknown, prefix = '') => {
@@ -137,8 +171,8 @@ const flattenSurveyData = (survey: Survey): DisplayField[] => {
     const leaf = String(fullKey).split('.').pop() || fullKey
     const leafLower = leaf.toLowerCase()
 
-    // Skip any created/createdAt/created_at fields
-    if (leafLower.includes('created')) return
+    // Skip created fields UNLESS showCreatedAt is true
+    if (leafLower.includes('created') && !showCreatedAt) return
 
     // Prefer mapped human label for known keys
     const mapped = keyLabelMap[leaf]
@@ -152,6 +186,13 @@ const flattenSurveyData = (survey: Survey): DisplayField[] => {
 
     if (value === null || value === undefined) {
       flattened.push({ label, value: '—' })
+    } else if (
+      leafLower.includes('createdat') ||
+      leafLower.includes('timestamp') ||
+      leaf === 'createdAt'
+    ) {
+      // Format timestamp fields
+      flattened.push({ label, value: formatTimestamp(value) })
     } else if (
       typeof value === 'string' ||
       typeof value === 'number' ||
@@ -415,12 +456,12 @@ const fetchRiskLevel = async () => {
               <h4 class="font-medium text-gray-900 mb-3">
                 Survey {{ index + 1 }}
                 <span v-if="survey.timestamp" class="text-sm text-gray-500 font-normal">
-                  ({{ new Date(survey.timestamp.seconds * 1000).toLocaleDateString() }})
+                  (Completed: {{ formatTimestamp(survey.timestamp) }})
                 </span>
               </h4>
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div
-                  v-for="field in flattenSurveyData(survey)"
+                  v-for="field in flattenSurveyData(survey, false)"
                   :key="field.label"
                   class="space-y-1"
                 >
@@ -451,16 +492,16 @@ const fetchRiskLevel = async () => {
             >
               <h4 class="font-medium text-gray-900 mb-3">
                 Self Assessment {{ idx + 1 }}
-                <span v-if="s.timestamp" class="text-sm text-gray-500 font-normal">
-                  ({{
-                    new Date(
-                      (s.timestamp as { seconds: number }).seconds * 1000,
-                    ).toLocaleDateString()
-                  }})
+                <span v-if="s.timestamp || s.createdAt" class="text-sm text-gray-500 font-normal">
+                  (Completed: {{ formatTimestamp(s.timestamp || s.createdAt) }})
                 </span>
               </h4>
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div v-for="field in flattenSurveyData(s)" :key="field.label" class="space-y-1">
+                <div
+                  v-for="field in flattenSurveyData(s, true)"
+                  :key="field.label"
+                  class="space-y-1"
+                >
                   <div class="text-sm font-medium text-gray-600">{{ field.label }}</div>
                   <div class="text-sm text-gray-800">{{ field.value }}</div>
                 </div>

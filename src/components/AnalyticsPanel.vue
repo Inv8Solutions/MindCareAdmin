@@ -1,13 +1,44 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 
 // Sample KPI cards — replace values with real backend data
+const nowIso = new Date().toISOString()
 const kpis = ref([
-  { title: 'Registered Students', value: '2,847', change: '+12%', trend: 'up' },
-  { title: 'Learners with special needs (LSNs)', value: '128', change: '+2%', trend: 'up' },
-  { title: 'Verified Students', value: '2,432', change: '+8%', trend: 'up' },
-  { title: 'Students who answered assessment', value: '1,956', change: '+4%', trend: 'up' },
+  { title: 'Registered Students', value: '2,847', change: '+12%', trend: 'up', createdAt: nowIso },
+  {
+    title: 'Learners with special needs (LSNs)',
+    value: '128',
+    change: '+2%',
+    trend: 'up',
+    createdAt: nowIso,
+  },
+  { title: 'Verified Students', value: '2,432', change: '+8%', trend: 'up', createdAt: nowIso },
+  {
+    title: 'Students who answered assessment',
+    value: '1,956',
+    change: '+4%',
+    trend: 'up',
+    createdAt: nowIso,
+  },
 ])
+
+const createdAt = ref(nowIso)
+// datetime-local expects `YYYY-MM-DDTHH:mm` so slice the ISO
+const createdAtLocal = ref(createdAt.value.slice(0, 16))
+watch(createdAtLocal, (val) => {
+  if (!val) return
+  const d = new Date(val)
+  if (!Number.isNaN(d.getTime())) createdAt.value = d.toISOString()
+})
+
+const formatCreatedAt = (iso?: string) => {
+  if (!iso) return ''
+  try {
+    return new Date(iso).toLocaleString()
+  } catch {
+    return iso
+  }
+}
 
 const timeRange = ref('7d')
 </script>
@@ -16,12 +47,18 @@ const timeRange = ref('7d')
   <div class="analytics-panel">
     <div class="panel-header">
       <h3>Analytics Dashboard</h3>
-      <select v-model="timeRange" class="time-selector">
-        <option value="1d">Last 24 hours</option>
-        <option value="7d">Last 7 days</option>
-        <option value="30d">Last 30 days</option>
-        <option value="90d">Last 90 days</option>
-      </select>
+      <div class="flex items-center gap-3">
+        <select v-model="timeRange" class="time-selector">
+          <option value="1d">Last 24 hours</option>
+          <option value="7d">Last 7 days</option>
+          <option value="30d">Last 30 days</option>
+          <option value="90d">Last 90 days</option>
+        </select>
+
+        <label class="text-sm text-gray-600">Created at</label>
+        <input type="datetime-local" v-model="createdAtLocal" class="time-selector" />
+        <div class="text-sm text-gray-500">{{ formatCreatedAt(createdAt) }}</div>
+      </div>
     </div>
 
     <!-- KPI Cards -->
@@ -33,6 +70,9 @@ const timeRange = ref('7d')
           <div class="kpi-change" :class="kpi.trend">
             <span class="change-icon">{{ kpi.trend === 'up' ? '↗' : '↘' }}</span>
             {{ kpi.change }}
+          </div>
+          <div class="text-xs text-gray-500 mt-2">
+            Created: {{ formatCreatedAt(kpi.createdAt) }}
           </div>
         </div>
       </div>

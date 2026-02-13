@@ -1,14 +1,20 @@
 <script setup lang="ts">
 import { ref, computed, onBeforeUnmount } from 'vue'
 import { db } from '@/firebase'
-import { collection, query as q, where, getDocs, orderBy, limit } from 'firebase/firestore'
+import { collection, query as q, where, getDocs, orderBy, limit, doc } from 'firebase/firestore'
 import { useRouter } from 'vue-router'
 
 // rawQuery stores only digits used for searching; displayQuery shows formatted value with dashes
 const rawQuery = ref('')
 const displayQuery = ref('')
 const results = ref<
-  Array<{ id: string; fullName: string; academicProgram?: string; schoolId?: string }>
+  Array<{
+    id: string
+    fullName: string
+    academicProgram?: string
+    schoolId?: string
+    assessmentTakenDate?: string
+  }>
 >([])
 const loading = ref(false)
 const error = ref('')
@@ -39,21 +45,66 @@ const fetchBySchoolId = async (term: string) => {
       limit(50),
     )
     const snap = await getDocs(qry)
-    results.value = snap.docs.map((d) => {
-    const data = d.data() as Record<string, unknown>
+    const resultPromises = snap.docs.map(async (d) => {
+      const data = d.data() as Record<string, unknown>
       const fullName =
         (data.fullName as string) ??
         (data.name as string) ??
         (data.displayName as string) ??
         'Unnamed'
       const academicProgram = (data.academicProgram as string) ?? (data.program as string) ?? ''
+
+      // Fetch most recent selfAssessment createdAt
+      let assessmentTakenDate: string | undefined
+      try {
+        const assessmentsCol = collection(doc(db, 'users', d.id), 'selfAssessments')
+        // Try without ordering first in case not all docs have createdAt
+        const assessmentSnap = await getDocs(assessmentsCol)
+        if (!assessmentSnap.empty) {
+          // Find the most recent assessment with createdAt
+          let mostRecentDate: Date | undefined
+          assessmentSnap.docs.forEach((assessmentDoc) => {
+            const assessmentData = assessmentDoc.data() as Record<string, unknown>
+            const createdAt = assessmentData.createdAt
+            let currentDate: Date | undefined
+
+            if (createdAt && typeof createdAt === 'object' && 'seconds' in createdAt) {
+              currentDate = new Date((createdAt as { seconds: number }).seconds * 1000)
+            } else if (typeof createdAt === 'number') {
+              currentDate = new Date(createdAt)
+            } else if (createdAt instanceof Date) {
+              currentDate = createdAt
+            } else if (typeof createdAt === 'string') {
+              currentDate = new Date(createdAt)
+            }
+
+            if (currentDate && (!mostRecentDate || currentDate > mostRecentDate)) {
+              mostRecentDate = currentDate
+            }
+          })
+
+          if (mostRecentDate) {
+            assessmentTakenDate = mostRecentDate.toLocaleDateString('en-US', {
+              year: 'numeric',
+              month: 'short',
+              day: 'numeric',
+            })
+          }
+        }
+      } catch (err) {
+        // Log error for debugging
+        console.error(`Failed to fetch assessments for user ${d.id}:`, err)
+      }
+
       return {
         id: d.id,
         fullName,
         academicProgram,
         schoolId: data.schoolId as string | undefined,
+        assessmentTakenDate,
       }
     })
+    results.value = await Promise.all(resultPromises)
   } catch (err: unknown) {
     results.value = []
     const msg = err instanceof Error ? err.message : String(err)
@@ -125,6 +176,7 @@ const goToDetails = (docId: string) => {
         >
           <strong>{{ r.fullName }}</strong>
           <div class="meta">Program: {{ r.academicProgram || '—' }}</div>
+          <div class="meta">Assessment Taken Date: {{ r.assessmentTakenDate || '—' }}</div>
         </li>
       </ul>
     </div>
